@@ -146,6 +146,10 @@ WEB требует поддержки WEB-прокси в клиенте Telegra
 
 QR-код ведёт на обычный WEB-вариант и выводится при наличии `qrencode`. В `list-users` эта ссылка показана только у активных пользователей.
 
+### Выдача ссылок через VK
+
+В [`bot/`](bot/README.md) находится VK-бот на Verse Bot: пользователь отправляет `/tg` или нажимает «Мои прокси» и получает свои актуальные ссылки. Администратор связывает VK ID с пользователем менеджера командой `/bind <vk_id> <имя>`. Бот запускается отдельно через Docker Compose и читает конфигурацию только для чтения.
+
 Подробнее: [WEB-прокси](https://github.com/Scratch-net/telego/blob/main/docs/web-proxy.md), [ee/dd в telego](https://github.com/Scratch-net/telego#protocol-modes) и [padding в MTProxy](https://github.com/TelegramMessenger/MTProxy#random-padding).
 
 ### Блокировка и удаление

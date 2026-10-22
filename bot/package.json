@@ -1,0 +1,23 @@
+{
+  "name": "mtproto-proxy-vk-bot",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env dist/src/index.js",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@verse-bot/vk": "0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "prettier": "^3.9.0",
+    "typescript": "7.0.2"
+  }
+}

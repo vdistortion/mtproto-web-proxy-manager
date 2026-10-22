@@ -1,0 +1,24 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      VK_TOKEN: ${VK_TOKEN:?Set VK_TOKEN}
+      VK_GROUP_ID: ${VK_GROUP_ID:?Set VK_GROUP_ID}
+      VK_ADMIN_IDS: ${VK_ADMIN_IDS:?Set VK_ADMIN_IDS}
+      PROXY_CONFIG_DIR: /proxy
+      BOT_DATA_DIR: /data
+    volumes:
+      - ${PROXY_CONFIG_DIR:-/etc/mtproto-manager}:/proxy:ro
+      - bot-data:/data
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"
+
+volumes:
+  bot-data:
