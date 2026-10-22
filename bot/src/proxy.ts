@@ -80,5 +80,6 @@ export function links(
     `MTProxy (ee):\nhttps://t.me/proxy?server=${domain}&port=${port}&secret=${ee}`,
     `MTProxy (dd):\nhttps://t.me/proxy?server=${domain}&port=${port}&secret=dd${secret}`,
     "Если WEB не поддерживается вашим клиентом, попробуйте MTProxy (ee или dd).",
+    "Ссылки удобнее открывать внутри Telegram. Если t.me не открывается без VPN, скопируйте ссылку в «Избранное» Telegram и нажмите её там.",
   ].join("\n\n");
 }

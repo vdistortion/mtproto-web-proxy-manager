@@ -1,0 +1,7 @@
+# Startup-only validation; maintenance commands must work without credentials.
+services:
+  bot:
+    environment:
+      VK_TOKEN: ${VK_TOKEN:?Set VK_TOKEN}
+      VK_GROUP_ID: ${VK_GROUP_ID:?Set VK_GROUP_ID}
+      VK_ADMIN_IDS: ${VK_ADMIN_IDS:?Set VK_ADMIN_IDS}

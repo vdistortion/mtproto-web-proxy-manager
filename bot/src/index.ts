@@ -1,4 +1,5 @@
 import { createVKBot } from "@verse-bot/vk";
+import { rmSync, writeFileSync } from "node:fs";
 import { BindingStore } from "./store.js";
 import { readProxy } from "./proxy.js";
 import { createHandler, keyboard } from "./handler.js";
@@ -11,6 +12,8 @@ function positiveId(value: string | undefined): number {
 }
 
 async function main() {
+  const readyFile = process.env.BOT_READY_FILE;
+  if (readyFile) rmSync(readyFile, { force: true });
   const token = process.env.VK_TOKEN;
   if (!token) throw new Error("VK_TOKEN is required");
   const groupId = positiveId(process.env.VK_GROUP_ID);
@@ -68,6 +71,7 @@ async function main() {
   });
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.once(signal, () => {
+      if (readyFile) rmSync(readyFile, { force: true });
       bot.stop().then(
         () => process.exit(0),
         () => process.exit(1),
@@ -75,11 +79,12 @@ async function main() {
     });
   }
   await bot.start();
+  if (readyFile) writeFileSync(readyFile, "ready\n", { mode: 0o600 });
 }
 
 main().catch(() => {
   console.error(
     "Бот не запущен. Проверьте переменные окружения, конфигурацию, хранилище и доступ к VK.",
   );
-  process.exitCode = 1;
+  process.exit(1);
 });

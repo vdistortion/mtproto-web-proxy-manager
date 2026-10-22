@@ -1,17 +1,37 @@
+# Compatibility for the first update executed by the old deploy.sh.
+# Current deploy.sh always overrides this with the persisted per-installation name.
+name: bot
+
 services:
   bot:
     build: .
+    image: ${COMPOSE_PROJECT_NAME:-mtproxy-manager-bot}-bot:local
     restart: unless-stopped
     environment:
-      VK_TOKEN: ${VK_TOKEN:?Set VK_TOKEN}
-      VK_GROUP_ID: ${VK_GROUP_ID:?Set VK_GROUP_ID}
-      VK_ADMIN_IDS: ${VK_ADMIN_IDS:?Set VK_ADMIN_IDS}
+      VK_TOKEN: ${VK_TOKEN:-}
+      VK_GROUP_ID: ${VK_GROUP_ID:-}
+      VK_ADMIN_IDS: ${VK_ADMIN_IDS:-}
       PROXY_CONFIG_DIR: /proxy
       BOT_DATA_DIR: /data
+      BOT_READY_FILE: /tmp/vk-bot-ready
     volumes:
       - ${PROXY_CONFIG_DIR:-/etc/mtproto-manager}:/proxy:ro
       - bot-data:/data
     read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('node:fs').accessSync('/tmp/vk-bot-ready')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
     security_opt:
       - no-new-privileges:true
     logging:

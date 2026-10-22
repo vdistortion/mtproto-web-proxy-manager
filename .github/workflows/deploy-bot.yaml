@@ -40,6 +40,7 @@ jobs:
       - run: bash -n mtproto-manager.sh bot/deploy.sh
       - run: bash tests/run.sh
       - run: bash tests/bot.sh
+      - run: bash tests/bot-compose.sh
 
   deploy:
     needs: test
@@ -47,6 +48,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - uses: actions/checkout@v4
       - name: Update bot on VPS
         env:
           VPS_HOST: ${{ secrets.VPS_HOST }}
@@ -55,6 +57,7 @@ jobs:
           VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
           VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
           BOT_INSTALL_DIR: ${{ vars.BOT_INSTALL_DIR }}
+          BOT_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
           VPS_USER="${VPS_USER:-root}"
@@ -65,13 +68,9 @@ jobs:
           printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
           trap 'rm -f ~/.ssh/id_ed25519' EXIT
-          # Quote the optional path for the remote shell, including spaces.
-          printf -v remote 'bash -s -- %q' "$BOT_INSTALL_DIR"
+          # Run the checked version of the installer, even on an older VPS checkout.
+          # An empty directory uses HOME on the VPS, not on the runner.
+          printf -v remote 'env BOT_INSTALL_DIR=%q BOT_REVISION=%q bash -s -- update' "$BOT_INSTALL_DIR" "$BOT_REVISION"
           ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
             -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
-            "$remote" <<'REMOTE'
-          set -euo pipefail
-          directory="${1:-$HOME/projects/mtproxy-manager-bot}"
-          [[ "$directory" == /* ]] || { echo 'BOT_INSTALL_DIR must be absolute.' >&2; exit 1; }
-          BOT_INSTALL_DIR="$directory" bash "$directory/bot/deploy.sh" update
-          REMOTE
+            "$remote" < bot/deploy.sh

@@ -536,6 +536,20 @@ install_manager_binary() {
     return 1
 }
 
+self_update() {
+    check_root
+    local tmp
+    tmp=$(mktemp "${BINARY_PATH}.XXXXXX") || return 1
+    if ! curl -fsSL --max-time 30 "$SCRIPT_URL" -o "$tmp" \
+        || [[ ! -s "$tmp" ]] || ! bash -n "$tmp" \
+        || ! chmod 755 "$tmp" || ! mv -f "$tmp" "$BINARY_PATH"; then
+        rm -f "$tmp"
+        echo 'Не удалось обновить менеджер. Прежний скрипт сохранён.' >&2
+        return 1
+    fi
+    echo "Менеджер обновлён: $BINARY_PATH. Перезапустите меню для загрузки новой версии."
+}
+
 write_compose_file() {
     cat > "$COMPOSE_FILE" <<EOF
 # Примеры лейблов для своего сайта — в README репозитория.
@@ -1567,6 +1581,7 @@ show_help() {
     echo ""
     echo -e "${BOLD}${BLUE}Установка и настройка:${NC}"
     echo "  install                              Установить скрипт и подготовить окружение"
+    echo "  self-update                          Скачать новую версию самого менеджера"
     echo "  setup [домен] [порт]                 Настроить прокси (домен + публичный MTProxy-порт)"
     echo "  uninstall                            Полностью удалить скрипт и данные"
     echo ""
@@ -1632,6 +1647,7 @@ show_menu() {
         echo -e "  ${CYAN}15${NC}) Импорт конфигурации"
         echo -e "  ${CYAN}16${NC}) Удалить скрипт и все данные"
         echo -e "  ${CYAN}17${NC}) VK-бот"
+        echo -e "  ${CYAN}18${NC}) Обновить сам менеджер"
         echo ""
         read -rp "  Выбор: " choice || return 0
         [ "$choice" = "0" ] && return 0
@@ -1662,6 +1678,7 @@ show_menu() {
                 15) main import "$f" ;;
                 16) main uninstall ;;
                 17) main bot ;;
+                18) main self-update ;;
                 *) echo -e "  ${RED}Неверный выбор.${NC}"; sleep 1 ;;
             esac
         )
@@ -1681,7 +1698,7 @@ main() (
 
     # Блокировка снимается при выходе из этого subshell, даже при ошибке команды.
     case "$cmd" in
-        install|setup|uninstall|add-user|remove-user|block-user|unblock-user|export|import|start|stop|restart|update|bot)
+        install|self-update|setup|uninstall|add-user|remove-user|block-user|unblock-user|export|import|start|stop|restart|update|bot)
             check_root
             if ! command -v flock &>/dev/null; then
                 echo -e "${RED}Ошибка: не найдена команда flock. Установите пакет util-linux.${NC}" >&2
@@ -1706,6 +1723,7 @@ main() (
             fi
             ;;
         setup)                setup_server "$@" ;;
+        self-update)          self_update ;;
         uninstall)            uninstall_script ;;
         add-user)             add_user "$@" ;;
         remove-user)          remove_user "$@" ;;
