@@ -57,7 +57,8 @@ jobs:
           BOT_INSTALL_DIR: ${{ vars.BOT_INSTALL_DIR }}
         run: |
           set -euo pipefail
-          : "${VPS_HOST:?Set VPS_HOST}" "${VPS_USER:?Set VPS_USER}"
+          VPS_USER="${VPS_USER:-root}"
+          : "${VPS_HOST:?Set VPS_HOST}"
           : "${VPS_SSH_KEY:?Set VPS_SSH_KEY}" "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS}"
           install -d -m 700 ~/.ssh
           printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
