@@ -33,7 +33,7 @@ test("self-unlink requires fresh confirmation and affects only the current accou
   };
   await send(1, "/bind 2 alice");
   await send(1, "/bind 3 alice");
-  assert.match((await send(2, "/privacy"))[0].message, /SHA-256/);
+  assert.match((await send(2, "/privacy"))[0].message, /отпечаток ключа/);
   assert.match(
     (await send(2, "/unlink confirm"))[0].message,
     /Нет действующего/,

@@ -20,6 +20,31 @@ function isBinding(value: unknown): value is Binding {
   );
 }
 
+export function readBindings(path: string): Record<string, Binding> {
+  let parsed: unknown = {};
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
+  if (
+    !parsed ||
+    Array.isArray(parsed) ||
+    typeof parsed !== "object" ||
+    Object.entries(parsed).some(
+      ([id, value]) => !/^[1-9]\d*$/.test(id) || !isBinding(value),
+    )
+  ) {
+    throw new Error("Invalid bindings file");
+  }
+  return Object.fromEntries(
+    Object.entries(parsed).filter((entry): entry is [string, Binding] =>
+      isBinding(entry[1]),
+    ),
+  );
+}
+
 export class BindingStore {
   private readonly path: string;
   private bindings: Record<string, Binding | undefined>;
@@ -27,32 +52,7 @@ export class BindingStore {
   constructor(directory: string) {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     this.path = join(directory, "bindings.json");
-    let parsed: unknown = {};
-    try {
-      parsed = JSON.parse(readFileSync(this.path, "utf8"));
-    } catch (error) {
-      if (!(
-        error instanceof Error &&
-        "code" in error &&
-        error.code === "ENOENT"
-      ))
-        throw error;
-    }
-    if (
-      !parsed ||
-      Array.isArray(parsed) ||
-      typeof parsed !== "object" ||
-      Object.entries(parsed).some(
-        ([id, value]) => !/^[1-9]\d*$/.test(id) || !isBinding(value),
-      )
-    ) {
-      throw new Error("Invalid bindings file");
-    }
-    this.bindings = Object.fromEntries(
-      Object.entries(parsed).filter((entry): entry is [string, Binding] =>
-        isBinding(entry[1]),
-      ),
-    );
+    this.bindings = readBindings(this.path);
   }
 
   get(id: string): Binding | undefined {

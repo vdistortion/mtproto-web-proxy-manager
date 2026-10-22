@@ -116,6 +116,8 @@ grep -q 'image tag old-image' "$TEST_DIR/docker.log"
 
 for action in status logs start stop restart; do bot_command "$action"; done
 grep -q 'compose logs --tail=100 bot' "$TEST_DIR/docker.log"
+LEGACY_VOLUME=1 bot_command bindings
+grep -q 'run --rm --network none --read-only.*target=/data,readonly.*list-bindings.js' "$TEST_DIR/docker.log"
 
 # A failed container removal must preserve both credentials and registration.
 if printf 'y\ny\n' | FAIL_DOWN=1 bot_uninstall > /dev/null 2>&1; then
