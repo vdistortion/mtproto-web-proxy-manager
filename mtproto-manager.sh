@@ -10,6 +10,7 @@ COMPOSE_FILE="$CONFIG_DIR/compose.yaml"
 ENV_FILE="$CONFIG_DIR/.env"
 BINARY_PATH="/usr/local/bin/mtproto-manager"
 LOCK_FILE="/run/mtproto-manager.lock"
+BOT_STATE_FILE="/etc/mtproto-manager-bot.conf"
 SCRIPT_URL="https://raw.githubusercontent.com/vdistortion/mtproto-web-proxy-manager/main/mtproto-manager.sh"
 
 # Движок telEgo: https://github.com/Scratch-net/telego
@@ -651,6 +652,13 @@ install_script() {
     read -rp "Настроить прокси сейчас? [y/n]: " setup_now || return 0
     if [[ "$setup_now" =~ ^[Yy]$ ]]; then
         setup_server
+    fi
+    local install_bot
+    if [[ -f "$TELEGO_CONFIG" ]]; then
+        read -rp "Установить VK-бота? [y/N]: " install_bot || return 0
+        if [[ "$install_bot" =~ ^[Yy]$ ]]; then
+            bot_install
+        fi
     fi
 }
 
@@ -1381,6 +1389,136 @@ update_image() {
     echo -e "  ${YELLOW}Образ задаётся полем image в секции telego файла ${COMPOSE_FILE}.${NC}"
 }
 
+# VK-бот. Метаданные хранятся отдельно от конфигурации прокси:
+# при сохранении бота во время удаления менеджера путь не теряется.
+
+bot_load_state() {
+    if [[ ! -f "$BOT_STATE_FILE" ]]; then
+        echo 'Бот не зарегистрирован. Выполните: mtproto-manager bot install' >&2
+        return 1
+    fi
+    { IFS= read -r BOT_OWNER; IFS= read -r BOT_DIRECTORY; } < "$BOT_STATE_FILE"
+    [[ -n "$BOT_OWNER" && "$BOT_DIRECTORY" == /* && "$BOT_DIRECTORY" != / ]] || {
+        echo 'Некорректные настройки установки бота.' >&2; return 1;
+    }
+    id "$BOT_OWNER" >/dev/null || return 1
+}
+
+bot_as_user() {
+    if [[ "$(id -un)" == "$BOT_OWNER" ]]; then
+        "$@"
+    else
+        runuser -u "$BOT_OWNER" -- "$@"
+    fi
+}
+
+bot_deploy() {
+    bot_as_user env BOT_INSTALL_DIR="$BOT_DIRECTORY" BOT_PROXY_CONFIG_DIR="$CONFIG_DIR" \
+        bash "$BOT_DIRECTORY/bot/deploy.sh" "$@"
+}
+
+bot_save_state() {
+    (umask 077; printf '%s\n%s\n' "$BOT_OWNER" "$BOT_DIRECTORY" > "${BOT_STATE_FILE}.tmp")
+    mv "${BOT_STATE_FILE}.tmp" "$BOT_STATE_FILE"
+}
+
+bot_install() {
+    check_root
+    check_docker
+    require_setup
+    local owner home directory default_directory installer
+    if [[ -f "$BOT_STATE_FILE" ]]; then
+        bot_load_state
+        echo "Зарегистрированный бот: $BOT_DIRECTORY (пользователь $BOT_OWNER)"
+    else
+        owner="${SUDO_USER:-$(id -un)}"
+        read -rp "Пользователь установки [$owner]: " BOT_OWNER
+        BOT_OWNER="${BOT_OWNER:-$owner}"
+        home=$(getent passwd "$BOT_OWNER" | cut -d: -f6)
+        [[ -n "$home" ]] || { echo 'Пользователь не найден.' >&2; return 1; }
+        default_directory="$home/projects/mtproxy-manager-bot"
+        read -rp "Каталог установки [$default_directory]: " directory
+        directory="${directory:-$default_directory}"
+        if [[ "$directory" == '~/'* ]]; then directory="$home/${directory:2}"; fi
+        [[ "$directory" == /* && "$directory" != *$'\n'* ]] || {
+            echo 'Нужен абсолютный путь или ~/каталог.' >&2; return 1;
+        }
+        BOT_DIRECTORY=$(realpath -m -- "$directory")
+        [[ "$BOT_DIRECTORY" != / && "$BOT_DIRECTORY" != "$home" ]] || {
+            echo 'Выберите отдельный каталог для бота.' >&2; return 1;
+        }
+    fi
+    # No implicit group changes: use an account with existing Docker access.
+    bot_as_user docker info >/dev/null || {
+        echo "Пользователю $BOT_OWNER нужен доступ к Docker." >&2; return 1;
+    }
+    bot_as_user git --version >/dev/null || { echo 'Установите Git.' >&2; return 1; }
+    installer=$(mktemp)
+    if ! curl -fsSL "${SCRIPT_URL%/mtproto-manager.sh}/bot/deploy.sh" -o "$installer"; then
+        rm -f "$installer"; return 1
+    fi
+    # The bootstrap contains no secrets; pass it via stdin, not a root-owned path.
+    if ! bot_as_user env BOT_INSTALL_DIR="$BOT_DIRECTORY" bash -s -- prepare < "$installer"; then
+        rm -f "$installer"; return 1
+    fi
+    rm -f "$installer"
+    bot_save_state
+    bot_deploy configure
+}
+
+bot_uninstall() {
+    bot_load_state
+    local confirm purge
+    read -rp "Удалить контейнер VK-бота ($BOT_DIRECTORY)? [y/N]: " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { echo 'Отменено.'; return 0; }
+    read -rp 'Удалить также токен, настройки и volume с привязками? [y/N]: ' purge
+    if [[ "$purge" =~ ^[Yy]$ ]]; then
+        bot_deploy purge || return 1
+    else
+        bot_deploy uninstall || return 1
+    fi
+    echo 'Контейнер бота удалён. Checkout и регистрация пути сохранены для повторной установки.'
+}
+
+bot_command() {
+    check_root
+    local action="${1:-menu}"
+    case "$action" in
+        install) bot_install ;;
+        uninstall) bot_uninstall ;;
+        configure|update|start|stop|restart|status|logs)
+            bot_load_state
+            bot_deploy "$action" ;;
+        menu)
+            local choice
+            echo 'VK-бот: 1) Установка  2) Настройка  3) Обновление  4) Статус'
+            echo '        5) Логи  6) Запуск  7) Остановка  8) Перезапуск  9) Удаление  0) Назад'
+            read -rp 'Выбор: ' choice || return 0
+            case "$choice" in
+                1) bot_install ;; 2) bot_command configure ;; 3) bot_command update ;;
+                4) bot_command status ;; 5) bot_command logs ;; 6) bot_command start ;;
+                7) bot_command stop ;; 8) bot_command restart ;; 9) bot_uninstall ;;
+                0) return 0 ;; *) echo 'Неверный выбор.'; return 1 ;;
+            esac ;;
+        *) echo 'Команды: bot install|configure|update|status|logs|start|stop|restart|uninstall' >&2; return 1 ;;
+    esac
+}
+
+update_components() {
+    local target="${1:-proxy}"
+    if [[ "$target" == menu ]]; then
+        echo '1) Прокси  2) VK-бот  3) Всё  0) Назад'
+        read -rp 'Обновить: ' target || return 0
+    fi
+    case "$target" in
+        proxy|1) update_image ;;
+        bot|2) bot_command update ;;
+        all|3) update_image; if [[ -f "$BOT_STATE_FILE" ]]; then bot_command update; fi ;;
+        0) return 0 ;;
+        *) echo 'Использование: update [proxy|bot|all]' >&2; return 1 ;;
+    esac
+}
+
 # Удаление
 
 uninstall_script() {
@@ -1390,6 +1528,11 @@ uninstall_script() {
     echo ""
     read -rp "Вы уверены? Контейнер и вся конфигурация будут удалены. [y/N]: " confirm
     [[ "${confirm,,}" != "y" ]] && echo "Отменено." && return
+
+    if [[ -f "$BOT_STATE_FILE" ]]; then
+        echo 'Обнаружена установка VK-бота. При сохранении он потеряет доступ к конфигурации прокси.'
+        bot_uninstall
+    fi
 
     check_docker
 
@@ -1443,7 +1586,11 @@ show_help() {
     echo "  restart                              Перезапустить"
     echo "  status                               Статус"
     echo "  show-traffic                         Трафик (docker stats)"
-    echo "  update                               Обновить образ и пересоздать"
+    echo "  update [proxy|bot|all]                Обновить прокси (по умолчанию), бота или всё"
+    echo "  bot                                  Меню VK-бота"
+    echo "  bot install|configure|update         Установка, настройка, обновление бота"
+    echo "  bot status|logs|start|stop|restart    Управление контейнером бота"
+    echo "  bot uninstall                        Удалить бота; данные — по подтверждению"
     echo ""
     echo -e "${BOLD}${BLUE}Прочее:${NC}"
     echo "  help                                 Показать эту справку"
@@ -1477,13 +1624,14 @@ show_menu() {
         echo -e "  ${CYAN}9${NC}) Перезапустить"
         echo -e "  ${CYAN}10${NC}) Статус"
         echo -e "  ${CYAN}11${NC}) Трафик"
-        echo -e "  ${CYAN}12${NC}) Обновить образ"
+        echo -e "  ${CYAN}12${NC}) Обновление (прокси / бот / всё)"
         echo ""
         echo -e "${BOLD}  Прочее${NC}"
         echo -e "  ${CYAN}13${NC}) Настройка сервера (setup)"
         echo -e "  ${CYAN}14${NC}) Экспорт конфигурации"
         echo -e "  ${CYAN}15${NC}) Импорт конфигурации"
         echo -e "  ${CYAN}16${NC}) Удалить скрипт и все данные"
+        echo -e "  ${CYAN}17${NC}) VK-бот"
         echo ""
         read -rp "  Выбор: " choice || return 0
         [ "$choice" = "0" ] && return 0
@@ -1508,11 +1656,12 @@ show_menu() {
                 9)  main restart ;;
                 10) main status ;;
                 11) main show-traffic ;;
-                12) main update ;;
+                12) main update menu ;;
                 13) main setup ;;
                 14) main export ;;
                 15) main import "$f" ;;
                 16) main uninstall ;;
+                17) main bot ;;
                 *) echo -e "  ${RED}Неверный выбор.${NC}"; sleep 1 ;;
             esac
         )
@@ -1532,7 +1681,7 @@ main() (
 
     # Блокировка снимается при выходе из этого subshell, даже при ошибке команды.
     case "$cmd" in
-        install|setup|uninstall|add-user|remove-user|block-user|unblock-user|export|import|start|stop|restart|update)
+        install|setup|uninstall|add-user|remove-user|block-user|unblock-user|export|import|start|stop|restart|update|bot)
             check_root
             if ! command -v flock &>/dev/null; then
                 echo -e "${RED}Ошибка: не найдена команда flock. Установите пакет util-linux.${NC}" >&2
@@ -1571,7 +1720,8 @@ main() (
         restart)              restart_all ;;
         status)               status_all ;;
         show-traffic)         show_traffic ;;
-        update)               update_image ;;
+        update)               update_components "$@" ;;
+        bot)                  bot_command "$@" ;;
         help|--help|-h)       show_help ;;
         "")                   show_menu ;;
         *)

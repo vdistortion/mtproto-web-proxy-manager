@@ -13,6 +13,7 @@ TELEGO_CONFIG="$CONFIG_DIR/config.toml"
 COMPOSE_FILE="$CONFIG_DIR/compose.yaml"
 ENV_FILE="$CONFIG_DIR/.env"
 LOCK_FILE="$TEST_DIR/manager.lock"
+BOT_STATE_FILE="$TEST_DIR/bot.conf"
 DOMAIN="proxy.example.com"
 MTPROXY_PORT="8443"
 
@@ -368,11 +369,12 @@ cmp -s "$ROOT_DIR/mtproto-manager.sh" "$BINARY_PATH" || fail "установка
 9 restart
 10 status
 11 show-traffic
-12 update
+12 update menu
 13 setup
 14 export
 15 import backup with spaces.tar.gz
 16 uninstall
+17 bot
 MENU
     : > "$TEST_DIR/menu-command.args"
     printf '0\n' | show_menu > "$TEST_DIR/menu-exit.log"
