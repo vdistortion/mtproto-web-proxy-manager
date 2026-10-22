@@ -383,12 +383,21 @@ cmp -s "$ROOT_DIR/mtproto-manager.sh" "$BINARY_PATH" || fail "установка
 10 status
 11 show-traffic
 12 update menu
-13 setup
-14 export
-15 import backup with spaces.tar.gz
-16 uninstall
-17 bot
-18 self-update
+13 bot bindings
+14 bot install
+15 bot configure
+16 bot update
+17 bot status
+18 bot logs
+19 bot start
+20 bot stop
+21 bot restart
+22 bot uninstall
+23 setup
+24 export
+25 import backup with spaces.tar.gz
+26 uninstall
+27 self-update
 MENU
     : > "$TEST_DIR/menu-command.args"
     printf '0\n' | show_menu > "$TEST_DIR/menu-exit.log"

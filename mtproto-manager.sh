@@ -1500,21 +1500,32 @@ bot_command() {
     case "$action" in
         install) bot_install ;;
         uninstall) bot_uninstall ;;
-        configure|update|start|stop|restart|status|logs)
+        configure|update|start|stop|restart|status|logs|bindings)
             bot_load_state
             bot_deploy "$action" ;;
         menu)
             local choice
-            echo 'VK-бот: 1) Установка  2) Настройка  3) Обновление  4) Статус'
-            echo '        5) Логи  6) Запуск  7) Остановка  8) Перезапуск  9) Удаление  0) Назад'
+            echo -e "${BOLD}VK-бот${NC}"
+            echo '  1) Установка'
+            echo '  2) Настройки'
+            echo '  3) Обновление'
+            echo '  4) Статус'
+            echo '  5) Логи'
+            echo '  6) Запуск'
+            echo '  7) Остановка'
+            echo '  8) Перезапуск'
+            echo '  9) Удаление'
+            echo ' 10) Привязки VK'
+            echo '  0) Назад'
             read -rp 'Выбор: ' choice || return 0
             case "$choice" in
                 1) bot_install ;; 2) bot_command configure ;; 3) bot_command update ;;
                 4) bot_command status ;; 5) bot_command logs ;; 6) bot_command start ;;
                 7) bot_command stop ;; 8) bot_command restart ;; 9) bot_uninstall ;;
+                10) bot_command bindings ;;
                 0) return 0 ;; *) echo 'Неверный выбор.'; return 1 ;;
             esac ;;
-        *) echo 'Команды: bot install|configure|update|status|logs|start|stop|restart|uninstall' >&2; return 1 ;;
+        *) echo 'Команды: bot install|configure|update|status|logs|bindings|start|stop|restart|uninstall' >&2; return 1 ;;
     esac
 }
 
@@ -1602,10 +1613,13 @@ show_help() {
     echo "  status                               Статус"
     echo "  show-traffic                         Трафик (docker stats)"
     echo "  update [proxy|bot|all]                Обновить прокси (по умолчанию), бота или всё"
+    echo ""
+    echo -e "${BOLD}${BLUE}VK-бот:${NC}"
     echo "  bot                                  Меню VK-бота"
     echo "  bot install|configure|update         Установка, настройка, обновление бота"
     echo "  bot status|logs|start|stop|restart    Управление контейнером бота"
     echo "  bot uninstall                        Удалить бота; данные — по подтверждению"
+    echo "  bot bindings                         Показать привязки пользователей к VK"
     echo ""
     echo -e "${BOLD}${BLUE}Прочее:${NC}"
     echo "  help                                 Показать эту справку"
@@ -1641,13 +1655,24 @@ show_menu() {
         echo -e "  ${CYAN}11${NC}) Трафик"
         echo -e "  ${CYAN}12${NC}) Обновление (прокси / бот / всё)"
         echo ""
-        echo -e "${BOLD}  Прочее${NC}"
-        echo -e "  ${CYAN}13${NC}) Настройка сервера (setup)"
-        echo -e "  ${CYAN}14${NC}) Экспорт конфигурации"
-        echo -e "  ${CYAN}15${NC}) Импорт конфигурации"
-        echo -e "  ${CYAN}16${NC}) Удалить скрипт и все данные"
-        echo -e "  ${CYAN}17${NC}) VK-бот"
-        echo -e "  ${CYAN}18${NC}) Обновить сам менеджер"
+        echo -e "${BOLD}  VK-бот${NC}"
+        echo -e "  ${CYAN}13${NC}) Привязки VK"
+        echo -e "  ${CYAN}14${NC}) Установить бота"
+        echo -e "  ${CYAN}15${NC}) Настройки бота"
+        echo -e "  ${CYAN}16${NC}) Обновить бота"
+        echo -e "  ${CYAN}17${NC}) Статус бота"
+        echo -e "  ${CYAN}18${NC}) Логи бота"
+        echo -e "  ${CYAN}19${NC}) Запустить бота"
+        echo -e "  ${CYAN}20${NC}) Остановить бота"
+        echo -e "  ${CYAN}21${NC}) Перезапустить бота"
+        echo -e "  ${CYAN}22${NC}) Удалить бота"
+        echo ""
+        echo -e "${BOLD}  Менеджер и конфигурация${NC}"
+        echo -e "  ${CYAN}23${NC}) Настройка сервера (setup)"
+        echo -e "  ${CYAN}24${NC}) Экспорт конфигурации"
+        echo -e "  ${CYAN}25${NC}) Импорт конфигурации"
+        echo -e "  ${CYAN}26${NC}) Удалить менеджер и данные"
+        echo -e "  ${CYAN}27${NC}) Обновить сам менеджер"
         echo ""
         read -rp "  Выбор: " choice || return 0
         [ "$choice" = "0" ] && return 0
@@ -1658,7 +1683,7 @@ show_menu() {
             set -e
             case "$choice" in
                 1|2|4|5|6) read -rp "  Имя пользователя: " u ;;
-                15) read -rp "  Файл для импорта: " f ;;
+                25) read -rp "  Файл для импорта: " f ;;
             esac
             case "$choice" in
                 1) main add-user "$u" ;;
@@ -1673,17 +1698,26 @@ show_menu() {
                 10) main status ;;
                 11) main show-traffic ;;
                 12) main update menu ;;
-                13) main setup ;;
-                14) main export ;;
-                15) main import "$f" ;;
-                16) main uninstall ;;
-                17) main bot ;;
-                18) main self-update ;;
+                13) main bot bindings ;;
+                14) main bot install ;;
+                15) main bot configure ;;
+                16) main bot update ;;
+                17) main bot status ;;
+                18) main bot logs ;;
+                19) main bot start ;;
+                20) main bot stop ;;
+                21) main bot restart ;;
+                22) main bot uninstall ;;
+                23) main setup ;;
+                24) main export ;;
+                25) main import "$f" ;;
+                26) main uninstall ;;
+                27) main self-update ;;
                 *) echo -e "  ${RED}Неверный выбор.${NC}"; sleep 1 ;;
             esac
         )
         set -e
-        if [ "$choice" = "16" ] && [ ! -f "$BINARY_PATH" ]; then
+        if [ "$choice" = "26" ] && [ ! -f "$BINARY_PATH" ]; then
             return 0
         fi
         read -rp "  Нажмите Enter..." || return 0

@@ -138,7 +138,7 @@ configure() {
 }
 
 main() {
-    case "$action" in prepare|install|configure|update|start|stop|restart|status|logs|uninstall|purge) ;; *) fail 'Unknown bot deployment command.' ;; esac
+    case "$action" in prepare|install|configure|update|start|stop|restart|status|logs|bindings|uninstall|purge) ;; *) fail 'Unknown bot deployment command.' ;; esac
     [[ "$directory" == /* && "$directory" != / ]] || fail 'BOT_INSTALL_DIR must be an absolute directory.'
     directory=$(realpath -m -- "$directory")
     for command in git docker flock sha256sum; do command -v "$command" >/dev/null || fail "Required: $command"; done
@@ -187,6 +187,16 @@ main() {
         stop) ensure_installed; compose stop bot; save_state stopped ;;
         status) echo "State: $state; Compose project: $project"; compose ps -a ;;
         logs) compose logs --tail=100 bot ;;
+        bindings)
+            local volume="$project"_bot-data
+            if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+                echo 'Хранилище привязок не найдено. Бот ещё не установлен или данные удалены.'
+                return
+            fi
+            docker image inspect "$project-bot:local" >/dev/null 2>&1 || fail 'Образ бота не найден. Установите или обновите бота.'
+            docker run --rm --network none --read-only \
+                --mount "type=volume,source=$volume,target=/data,readonly" \
+                --entrypoint node "$project-bot:local" /app/dist/src/list-bindings.js ;;
         uninstall|purge)
             if [[ "$action" == purge ]]; then compose down --remove-orphans --volumes; else compose down --remove-orphans; fi
             save_state removed
