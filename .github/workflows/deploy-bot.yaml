@@ -9,12 +9,6 @@ on:
       - "tests/**"
       - ".github/workflows/deploy-bot.yaml"
   workflow_dispatch:
-  pull_request:
-    paths:
-      - "bot/**"
-      - "mtproto-manager.sh"
-      - "tests/**"
-      - ".github/workflows/deploy-bot.yaml"
 
 permissions:
   contents: read
