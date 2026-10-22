@@ -1,0 +1,76 @@
+name: Deploy VK bot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "bot/**"
+      - "mtproto-manager.sh"
+      - "tests/**"
+      - ".github/workflows/deploy-bot.yaml"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "bot/**"
+      - "mtproto-manager.sh"
+      - "tests/**"
+      - ".github/workflows/deploy-bot.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-vk-bot
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: bot/package-lock.json
+      - run: npm ci
+        working-directory: bot
+      - run: npm test
+        working-directory: bot
+      - run: bash -n mtproto-manager.sh bot/deploy.sh
+      - run: bash tests/run.sh
+      - run: bash tests/bot.sh
+      - run: bash tests/bot-compose.sh
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_BOT_DEPLOY == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update bot on VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          BOT_INSTALL_DIR: ${{ vars.BOT_INSTALL_DIR }}
+          BOT_REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          VPS_USER="${VPS_USER:-root}"
+          : "${VPS_HOST:?Set VPS_HOST}"
+          : "${VPS_SSH_KEY:?Set VPS_SSH_KEY}" "${VPS_KNOWN_HOSTS:?Set VPS_KNOWN_HOSTS}"
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/id_ed25519' EXIT
+          # Run the checked version of the installer, even on an older VPS checkout.
+          # An empty directory uses HOME on the VPS, not on the runner.
+          printf -v remote 'env BOT_INSTALL_DIR=%q BOT_REVISION=%q bash -s -- update' "$BOT_INSTALL_DIR" "$BOT_REVISION"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 \
+            -p "${VPS_PORT:-22}" "$VPS_USER@$VPS_HOST" \
+            "$remote" < bot/deploy.sh

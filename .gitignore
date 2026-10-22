@@ -1,1 +1,8 @@
 .idea
+node_modules/
+bot/.env
+bot/.env.tmp
+bot/.deploy/
+bot/data/
+bot/dist/
+bot/*.backup.json
